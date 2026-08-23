@@ -1,6 +1,5 @@
 package com.scrollcheck.app
 
-import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.AppOpsManager
@@ -25,6 +24,10 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 import kotlin.math.roundToInt
 
 class MainActivity : Activity() {
@@ -40,6 +43,10 @@ class MainActivity : Activity() {
 
     private var dailyGoal = 60L
 
+    // =========================================================
+    // DATA MODELS
+    // =========================================================
+
     data class AppInfo(
         val name: String,
         val packageName: String,
@@ -48,28 +55,37 @@ class MainActivity : Activity() {
     )
 
     data class UsageResult(
-        val minutes: Long
+        val minutes: Long,
+        val sessions: Int
     )
 
+    // =========================================================
+    // TRACKED APPS
+    // =========================================================
+
     private val trackedApps = listOf(
+
         AppInfo(
             "Instagram",
             "com.instagram.android",
             "IG",
             Color.rgb(220, 70, 120)
         ),
+
         AppInfo(
             "YouTube",
             "com.google.android.youtube",
             "YT",
             Color.rgb(220, 45, 45)
         ),
+
         AppInfo(
             "WhatsApp",
             "com.whatsapp",
             "WA",
             Color.rgb(35, 175, 105)
         ),
+
         AppInfo(
             "X",
             "com.twitter.android",
@@ -77,6 +93,10 @@ class MainActivity : Activity() {
             Color.rgb(25, 30, 35)
         )
     )
+
+    // =========================================================
+    // COLORS
+    // =========================================================
 
     private val pageBackground =
         Color.rgb(246, 247, 251)
@@ -102,6 +122,10 @@ class MainActivity : Activity() {
     private val orange =
         Color.rgb(235, 145, 50)
 
+    // =========================================================
+    // ACTIVITY
+    // =========================================================
+
     override fun onCreate(
         savedInstanceState: Bundle?
     ) {
@@ -114,7 +138,6 @@ class MainActivity : Activity() {
             )
 
         createNotificationChannels()
-        requestNotificationPermissionIfNeeded()
 
         buildScreen()
     }
@@ -179,17 +202,26 @@ class MainActivity : Activity() {
         addHeader()
 
         if (!hasUsageAccess()) {
+
             addAccessCard()
+
             return
         }
+
+        /*
+         * IMPORTANT:
+         *
+         * Every section uses this SAME usage map.
+         *
+         * This prevents different parts of ScrollCheck
+         * from calculating different values.
+         */
 
         val usage =
             trackedApps.associateWith { app ->
 
-                getUsageForRange(
-                    app.packageName,
-                    startOfDay(0),
-                    System.currentTimeMillis()
+                getTodayUsage(
+                    app.packageName
                 )
             }
 
@@ -198,7 +230,15 @@ class MainActivity : Activity() {
                 it.minutes
             }
 
+        // -----------------------------------------------------
+        // TODAY
+        // -----------------------------------------------------
+
         addTodayCard(total)
+
+        // -----------------------------------------------------
+        // TRACKED APPS
+        // -----------------------------------------------------
 
         addSectionTitle(
             "Tracked apps"
@@ -206,11 +246,19 @@ class MainActivity : Activity() {
 
         addTrackedApps(usage)
 
+        // -----------------------------------------------------
+        // APP GOALS
+        // -----------------------------------------------------
+
         addSectionTitle(
             "App goals"
         )
 
         addAppGoalsCard(usage)
+
+        // -----------------------------------------------------
+        // 7 DAY USAGE
+        // -----------------------------------------------------
 
         addSectionTitle(
             "7-day usage"
@@ -218,11 +266,19 @@ class MainActivity : Activity() {
 
         addSevenDayUsageCard()
 
+        // -----------------------------------------------------
+        // TREND
+        // -----------------------------------------------------
+
         addSectionTitle(
             "Usage trend"
         )
 
         addTrendCard()
+
+        // -----------------------------------------------------
+        // LATE NIGHT
+        // -----------------------------------------------------
 
         addSectionTitle(
             "🌙 Late-night usage"
@@ -230,11 +286,19 @@ class MainActivity : Activity() {
 
         addLateNightCard()
 
+        // -----------------------------------------------------
+        // DAILY GOAL
+        // -----------------------------------------------------
+
         addSectionTitle(
             "Daily goal"
         )
 
         addGoalCard(total)
+
+        // -----------------------------------------------------
+        // SCORE
+        // -----------------------------------------------------
 
         addSectionTitle(
             "Scroll Balance"
@@ -242,11 +306,19 @@ class MainActivity : Activity() {
 
         addScoreCard(total)
 
+        // -----------------------------------------------------
+        // MOST USED
+        // -----------------------------------------------------
+
         addSectionTitle(
             "Most used"
         )
 
         addMostUsedCard(usage)
+
+        // -----------------------------------------------------
+        // BREAK
+        // -----------------------------------------------------
 
         addSectionTitle(
             "Break"
@@ -254,9 +326,21 @@ class MainActivity : Activity() {
 
         addBreakCard()
 
+        // -----------------------------------------------------
+        // ACCURACY
+        // -----------------------------------------------------
+
         addAccuracyCard()
 
+        // -----------------------------------------------------
+        // REFRESH
+        // -----------------------------------------------------
+
         addRefreshButton()
+
+        // -----------------------------------------------------
+        // FOOTER
+        // -----------------------------------------------------
 
         addFooter()
     }
@@ -284,6 +368,16 @@ class MainActivity : Activity() {
         addText(
             "Track  •  Understand  •  Improve  •  Reward",
             14,
+            gray,
+            false
+        )
+
+        addText(
+            SimpleDateFormat(
+                "EEEE, d MMMM",
+                Locale.getDefault()
+            ).format(Date()),
+            13,
             gray,
             false
         )
@@ -344,38 +438,31 @@ class MainActivity : Activity() {
     }
 
     // =========================================================
-    // TIME
+    // START OF TODAY
     // =========================================================
 
-    private fun startOfDay(
-        daysAgo: Int
-    ): Long {
+    private fun startOfToday(): Long {
 
         val calendar =
-            java.util.Calendar.getInstance()
-
-        calendar.add(
-            java.util.Calendar.DAY_OF_YEAR,
-            -daysAgo
-        )
+            Calendar.getInstance()
 
         calendar.set(
-            java.util.Calendar.HOUR_OF_DAY,
+            Calendar.HOUR_OF_DAY,
             0
         )
 
         calendar.set(
-            java.util.Calendar.MINUTE,
+            Calendar.MINUTE,
             0
         )
 
         calendar.set(
-            java.util.Calendar.SECOND,
+            Calendar.SECOND,
             0
         )
 
         calendar.set(
-            java.util.Calendar.MILLISECOND,
+            Calendar.MILLISECOND,
             0
         )
 
@@ -386,237 +473,206 @@ class MainActivity : Activity() {
     // ACCURATE USAGE
     // =========================================================
 
-    private fun getUsageForRange(
-        targetPackage: String,
-        requestedStart: Long,
-        requestedEnd: Long
+    private fun getTodayUsage(
+        targetPackage: String
     ): UsageResult {
 
         if (!hasUsageAccess()) {
-            return UsageResult(0L)
+
+            return UsageResult(
+                0L,
+                0
+            )
         }
 
-        if (requestedEnd <= requestedStart) {
-            return UsageResult(0L)
-        }
-
-        val manager =
+        val usageManager =
             getSystemService(
                 Context.USAGE_STATS_SERVICE
             ) as UsageStatsManager
 
-        /*
-         * Query before the requested period so that an app
-         * which was already open at midnight can be detected.
-         */
-        val queryStart =
-            maxOf(
-                0L,
-                requestedStart -
-                    24L * 60L * 60L * 1000L
-            )
+        val start =
+            startOfToday()
 
+        val end =
+            System.currentTimeMillis()
+
+        /*
+         * Query from midnight until now.
+         */
         val events =
-            manager.queryEvents(
-                queryStart,
-                requestedEnd
+            usageManager.queryEvents(
+                start,
+                end
             )
 
         val event =
             UsageEvents.Event()
 
-        /*
-         * Foreground intervals.
-         *
-         * Pair.first  = start
-         * Pair.second = end
-         */
-        val intervals =
-            mutableListOf<Pair<Long, Long>>()
-
-        var active = false
-        var sessionStart = 0L
-
-        while (events.hasNextEvent()) {
-
-            events.getNextEvent(event)
-
-            if (event.packageName != targetPackage) {
-                continue
-            }
-
-            val timestamp =
-                event.timeStamp
-
-            if (timestamp > requestedEnd) {
-                break
-            }
-
-            when (event.eventType) {
-
-                UsageEvents.Event.ACTIVITY_RESUMED,
-                UsageEvents.Event.MOVE_TO_FOREGROUND -> {
-
-                    /*
-                     * Do not start another interval if the
-                     * package is already considered foreground.
-                     */
-                    if (!active) {
-
-                        active = true
-
-                        sessionStart =
-                            timestamp
-                    }
-                }
-
-                UsageEvents.Event.ACTIVITY_PAUSED,
-                UsageEvents.Event.ACTIVITY_STOPPED,
-                UsageEvents.Event.MOVE_TO_BACKGROUND -> {
-
-                    if (active) {
-
-                        val sessionEnd =
-                            timestamp
-
-                        val clippedStart =
-                            maxOf(
-                                sessionStart,
-                                requestedStart
-                            )
-
-                        val clippedEnd =
-                            minOf(
-                                sessionEnd,
-                                requestedEnd
-                            )
-
-                        if (
-                            clippedEnd >
-                            clippedStart
-                        ) {
-
-                            intervals.add(
-                                Pair(
-                                    clippedStart,
-                                    clippedEnd
-                                )
-                            )
-                        }
-
-                        active = false
-                        sessionStart = 0L
-                    }
-                }
-            }
-        }
-
-        /*
-         * If the app is still foreground at the end
-         * of the requested period, close the interval there.
-         */
-        if (
-            active &&
-            sessionStart > 0L
-        ) {
-
-            val clippedStart =
-                maxOf(
-                    sessionStart,
-                    requestedStart
-                )
-
-            val clippedEnd =
-                requestedEnd
-
-            if (
-                clippedEnd >
-                clippedStart
-            ) {
-
-                intervals.add(
-                    Pair(
-                        clippedStart,
-                        clippedEnd
-                    )
-                )
-            }
-        }
-
-        if (intervals.isEmpty()) {
-            return UsageResult(0L)
-        }
-
-        /*
-         * Sort intervals chronologically.
-         */
-        val sortedIntervals =
-            intervals.sortedBy {
-                it.first
-            }
-
-        /*
-         * Merge overlapping intervals.
-         *
-         * This prevents duplicate counting when Android
-         * reports several activities from the same package.
-         */
-        var mergedStart =
-            sortedIntervals[0].first
-
-        var mergedEnd =
-            sortedIntervals[0].second
+        var foregroundStart =
+            -1L
 
         var totalMilliseconds =
             0L
 
-        for (
-            index in 1 until sortedIntervals.size
+        var sessions =
+            0
+
+        while (
+            events.hasNextEvent()
         ) {
 
-            val current =
-                sortedIntervals[index]
+            events.getNextEvent(event)
 
-            val currentStart =
-                current.first
-
-            val currentEnd =
-                current.second
-
+            /*
+             * Ignore all other applications.
+             */
             if (
-                currentStart <=
-                mergedEnd
+                event.packageName !=
+                targetPackage
             ) {
+                continue
+            }
 
-                mergedEnd =
-                    maxOf(
-                        mergedEnd,
-                        currentEnd
-                    )
+            when (event.eventType) {
 
-            } else {
+                /*
+                 * Modern Android.
+                 */
+                UsageEvents.Event.ACTIVITY_RESUMED -> {
 
-                totalMilliseconds +=
-                    mergedEnd -
-                    mergedStart
+                    if (
+                        foregroundStart < 0L
+                    ) {
 
-                mergedStart =
-                    currentStart
+                        foregroundStart =
+                            event.timeStamp
 
-                mergedEnd =
-                    currentEnd
+                        sessions++
+                    }
+                }
+
+                /*
+                 * Older Android.
+                 */
+                UsageEvents.Event.MOVE_TO_FOREGROUND -> {
+
+                    if (
+                        foregroundStart < 0L
+                    ) {
+
+                        foregroundStart =
+                            event.timeStamp
+
+                        sessions++
+                    }
+                }
+
+                /*
+                 * Modern Android.
+                 */
+                UsageEvents.Event.ACTIVITY_PAUSED -> {
+
+                    if (
+                        foregroundStart >= 0L
+                    ) {
+
+                        val duration =
+                            event.timeStamp -
+                                foregroundStart
+
+                        if (
+                            duration > 0L
+                        ) {
+
+                            totalMilliseconds +=
+                                duration
+                        }
+
+                        foregroundStart =
+                            -1L
+                    }
+                }
+
+                /*
+                 * Modern Android fallback.
+                 */
+                UsageEvents.Event.ACTIVITY_STOPPED -> {
+
+                    if (
+                        foregroundStart >= 0L
+                    ) {
+
+                        val duration =
+                            event.timeStamp -
+                                foregroundStart
+
+                        if (
+                            duration > 0L
+                        ) {
+
+                            totalMilliseconds +=
+                                duration
+                        }
+
+                        foregroundStart =
+                            -1L
+                    }
+                }
+
+                /*
+                 * Older Android.
+                 */
+                UsageEvents.Event.MOVE_TO_BACKGROUND -> {
+
+                    if (
+                        foregroundStart >= 0L
+                    ) {
+
+                        val duration =
+                            event.timeStamp -
+                                foregroundStart
+
+                        if (
+                            duration > 0L
+                        ) {
+
+                            totalMilliseconds +=
+                                duration
+                        }
+
+                        foregroundStart =
+                            -1L
+                    }
+                }
             }
         }
 
         /*
-         * Add the final merged interval.
+         * If the application is currently open,
+         * close the active session at the current time.
          */
-        totalMilliseconds +=
-            mergedEnd -
-            mergedStart
+        if (
+            foregroundStart >= 0L
+        ) {
+
+            val duration =
+                end -
+                    foregroundStart
+
+            if (
+                duration > 0L
+            ) {
+
+                totalMilliseconds +=
+                    duration
+            }
+        }
 
         /*
-         * Round to nearest minute.
+         * Convert milliseconds to minutes.
+         *
+         * We round only once, after calculating the
+         * complete foreground duration.
          */
         val minutes =
             (
@@ -627,12 +683,13 @@ class MainActivity : Activity() {
                 .toLong()
 
         return UsageResult(
-            minutes
+            minutes,
+            sessions
         )
     }
 
     // =========================================================
-    // TODAY
+    // TODAY CARD
     // =========================================================
 
     private fun addTodayCard(
@@ -678,8 +735,11 @@ class MainActivity : Activity() {
             if (
                 total <= dailyGoal
             ) {
+
                 "✓ Within your goal"
+
             } else {
+
                 "⚠ Above your goal"
             }
 
@@ -725,7 +785,9 @@ class MainActivity : Activity() {
 
         val sorted =
             trackedApps.sortedByDescending {
-                usage[it]?.minutes ?: 0L
+
+                usage[it]?.minutes
+                    ?: 0L
             }
 
         sorted.forEachIndexed {
@@ -736,13 +798,17 @@ class MainActivity : Activity() {
                 card,
                 app,
                 usage[app]
-                    ?: UsageResult(0L)
+                    ?: UsageResult(
+                        0L,
+                        0
+                    )
             )
 
             if (
                 index <
                 sorted.lastIndex
             ) {
+
                 addDivider(card)
             }
         }
@@ -847,11 +913,20 @@ class MainActivity : Activity() {
 
         information.addView(name)
 
-        val subtitle =
+        val sessionText =
             TextView(this).apply {
 
                 text =
-                    "Android foreground time"
+                    if (
+                        result.sessions == 1
+                    ) {
+
+                        "1 session today"
+
+                    } else {
+
+                        "${result.sessions} sessions today"
+                    }
 
                 textSize = 12f
 
@@ -865,7 +940,7 @@ class MainActivity : Activity() {
                 )
             }
 
-        information.addView(subtitle)
+        information.addView(sessionText)
 
         row.addView(information)
 
@@ -943,7 +1018,10 @@ class MainActivity : Activity() {
 
             val result =
                 usage[app]
-                    ?: UsageResult(0L)
+                    ?: UsageResult(
+                        0L,
+                        0
+                    )
 
             val goal =
                 getAppGoal(app)
@@ -1006,8 +1084,11 @@ class MainActivity : Activity() {
                         if (
                             result.minutes >= goal
                         ) {
+
                             "⚠ Goal reached"
+
                         } else {
+
                             "${formatTime(
                                 goal -
                                     result.minutes
@@ -1020,8 +1101,11 @@ class MainActivity : Activity() {
                         if (
                             result.minutes >= goal
                         ) {
+
                             orange
+
                         } else {
+
                             gray
                         }
                     )
@@ -1037,7 +1121,10 @@ class MainActivity : Activity() {
                 )
 
             button.setOnClickListener {
-                showAppGoalDialog(app)
+
+                showAppGoalDialog(
+                    app
+                )
             }
 
             row.addView(button)
@@ -1048,6 +1135,7 @@ class MainActivity : Activity() {
                 index <
                 trackedApps.lastIndex
             ) {
+
                 addDivider(card)
             }
         }
@@ -1114,7 +1202,10 @@ class MainActivity : Activity() {
 
             val result =
                 usage[app]
-                    ?: UsageResult(0L)
+                    ?: UsageResult(
+                        0L,
+                        0
+                    )
 
             val goal =
                 getAppGoal(app)
@@ -1124,7 +1215,7 @@ class MainActivity : Activity() {
             ) {
 
                 val warningKey =
-                    "warn_${app.packageName}_${startOfDay(0)}"
+                    "warn_${app.packageName}_${startOfToday()}"
 
                 val alreadyShown =
                     prefs.getBoolean(
@@ -1159,13 +1250,18 @@ class MainActivity : Activity() {
 
         if (
             Build.VERSION.SDK_INT >=
-            Build.VERSION_CODES.TIRAMISU &&
-            checkSelfPermission(
-                Manifest.permission.POST_NOTIFICATIONS
-            ) !=
-            PackageManager.PERMISSION_GRANTED
+            Build.VERSION_CODES.TIRAMISU
         ) {
-            return
+
+            if (
+                checkSelfPermission(
+                    android.Manifest.permission.POST_NOTIFICATIONS
+                ) !=
+                PackageManager.PERMISSION_GRANTED
+            ) {
+
+                return
+            }
         }
 
         val manager =
@@ -1217,7 +1313,7 @@ class MainActivity : Activity() {
     }
 
     // =========================================================
-    // 7 DAY USAGE
+    // 7-DAY USAGE
     // =========================================================
 
     private fun getSevenDayTotal(): List<Long> {
@@ -1236,8 +1332,11 @@ class MainActivity : Activity() {
                 if (
                     daysAgo == 0
                 ) {
+
                     System.currentTimeMillis()
+
                 } else {
+
                     startOfDay(
                         daysAgo - 1
                     )
@@ -1249,7 +1348,7 @@ class MainActivity : Activity() {
             trackedApps.forEach { app ->
 
                 total +=
-                    getUsageForRange(
+                    getUsageForRangeEvents(
                         app.packageName,
                         start,
                         end
@@ -1262,6 +1361,203 @@ class MainActivity : Activity() {
         return values
     }
 
+    private fun startOfDay(
+        daysAgo: Int
+    ): Long {
+
+        val calendar =
+            Calendar.getInstance()
+
+        calendar.add(
+            Calendar.DAY_OF_YEAR,
+            -daysAgo
+        )
+
+        calendar.set(
+            Calendar.HOUR_OF_DAY,
+            0
+        )
+
+        calendar.set(
+            Calendar.MINUTE,
+            0
+        )
+
+        calendar.set(
+            Calendar.SECOND,
+            0
+        )
+
+        calendar.set(
+            Calendar.MILLISECOND,
+            0
+        )
+
+        return calendar.timeInMillis
+    }
+
+    /*
+     * Event-based calculation for historical ranges.
+     *
+     * Today's main number still uses getTodayUsage().
+     */
+    private fun getUsageForRangeEvents(
+        targetPackage: String,
+        requestedStart: Long,
+        requestedEnd: Long
+    ): UsageResult {
+
+        if (
+            !hasUsageAccess() ||
+            requestedEnd <= requestedStart
+        ) {
+
+            return UsageResult(
+                0L,
+                0
+            )
+        }
+
+        val manager =
+            getSystemService(
+                Context.USAGE_STATS_SERVICE
+            ) as UsageStatsManager
+
+        val queryStart =
+            maxOf(
+                0L,
+                requestedStart -
+                    24L * 60L * 60L * 1000L
+            )
+
+        val events =
+            manager.queryEvents(
+                queryStart,
+                requestedEnd
+            )
+
+        val event =
+            UsageEvents.Event()
+
+        var foregroundStart =
+            -1L
+
+        var totalMilliseconds =
+            0L
+
+        var sessions =
+            0
+
+        while (
+            events.hasNextEvent()
+        ) {
+
+            events.getNextEvent(event)
+
+            if (
+                event.packageName !=
+                targetPackage
+            ) {
+                continue
+            }
+
+            val timestamp =
+                event.timeStamp
+
+            if (
+                timestamp > requestedEnd
+            ) {
+                break
+            }
+
+            when (event.eventType) {
+
+                UsageEvents.Event.ACTIVITY_RESUMED,
+                UsageEvents.Event.MOVE_TO_FOREGROUND -> {
+
+                    if (
+                        foregroundStart < 0L
+                    ) {
+
+                        foregroundStart =
+                            timestamp
+
+                        sessions++
+                    }
+                }
+
+                UsageEvents.Event.ACTIVITY_PAUSED,
+                UsageEvents.Event.ACTIVITY_STOPPED,
+                UsageEvents.Event.MOVE_TO_BACKGROUND -> {
+
+                    if (
+                        foregroundStart >= 0L
+                    ) {
+
+                        val clippedStart =
+                            maxOf(
+                                foregroundStart,
+                                requestedStart
+                            )
+
+                        val clippedEnd =
+                            minOf(
+                                timestamp,
+                                requestedEnd
+                            )
+
+                        if (
+                            clippedEnd >
+                            clippedStart
+                        ) {
+
+                            totalMilliseconds +=
+                                clippedEnd -
+                                    clippedStart
+                        }
+
+                        foregroundStart =
+                            -1L
+                    }
+                }
+            }
+        }
+
+        if (
+            foregroundStart >= 0L
+        ) {
+
+            val clippedStart =
+                maxOf(
+                    foregroundStart,
+                    requestedStart
+                )
+
+            if (
+                requestedEnd >
+                clippedStart
+            ) {
+
+                totalMilliseconds +=
+                    requestedEnd -
+                        clippedStart
+            }
+        }
+
+        val minutes =
+            (
+                totalMilliseconds /
+                    60000.0
+            )
+                .roundToInt()
+                .toLong()
+
+        return UsageResult(
+            minutes,
+            sessions
+        )
+    }
+
     private fun addSevenDayUsageCard() {
 
         val card =
@@ -1271,7 +1567,10 @@ class MainActivity : Activity() {
             getSevenDayTotal()
 
         val max =
-            (values.maxOrNull() ?: 1L)
+            (
+                values.maxOrNull()
+                    ?: 1L
+            )
                 .coerceAtLeast(1L)
 
         val labels =
@@ -1396,13 +1695,15 @@ class MainActivity : Activity() {
         addCardBody(
             card,
             "7-day total: ${
-                formatTime(values.sum())
+                formatTime(
+                    values.sum()
+                )
             }"
         )
 
         addCardBody(
             card,
-            "Uses merged Android foreground events for each day."
+            "Historical values use the same foreground-event method."
         )
 
         addCard(card)
@@ -1496,30 +1797,30 @@ class MainActivity : Activity() {
     ): Long {
 
         val calendar =
-            java.util.Calendar.getInstance()
+            Calendar.getInstance()
 
         calendar.add(
-            java.util.Calendar.DAY_OF_YEAR,
+            Calendar.DAY_OF_YEAR,
             -daysAgo
         )
 
         calendar.set(
-            java.util.Calendar.HOUR_OF_DAY,
+            Calendar.HOUR_OF_DAY,
             22
         )
 
         calendar.set(
-            java.util.Calendar.MINUTE,
+            Calendar.MINUTE,
             0
         )
 
         calendar.set(
-            java.util.Calendar.SECOND,
+            Calendar.SECOND,
             0
         )
 
         calendar.set(
-            java.util.Calendar.MILLISECOND,
+            Calendar.MILLISECOND,
             0
         )
 
@@ -1531,30 +1832,30 @@ class MainActivity : Activity() {
     ): Long {
 
         val calendar =
-            java.util.Calendar.getInstance()
+            Calendar.getInstance()
 
         calendar.add(
-            java.util.Calendar.DAY_OF_YEAR,
+            Calendar.DAY_OF_YEAR,
             -daysAgo
         )
 
         calendar.set(
-            java.util.Calendar.HOUR_OF_DAY,
+            Calendar.HOUR_OF_DAY,
             23
         )
 
         calendar.set(
-            java.util.Calendar.MINUTE,
+            Calendar.MINUTE,
             59
         )
 
         calendar.set(
-            java.util.Calendar.SECOND,
+            Calendar.SECOND,
             59
         )
 
         calendar.set(
-            java.util.Calendar.MILLISECOND,
+            Calendar.MILLISECOND,
             999
         )
 
@@ -1586,6 +1887,7 @@ class MainActivity : Activity() {
         if (
             end <= start
         ) {
+
             return 0L
         }
 
@@ -1595,7 +1897,7 @@ class MainActivity : Activity() {
         trackedApps.forEach { app ->
 
             total +=
-                getUsageForRange(
+                getUsageForRangeEvents(
                     app.packageName,
                     start,
                     end
@@ -1665,7 +1967,7 @@ class MainActivity : Activity() {
                         lateNightStart(0)
                     ) {
 
-                        getUsageForRange(
+                        getUsageForRangeEvents(
                             app.packageName,
                             lateNightStart(0),
                             end
@@ -1738,11 +2040,12 @@ class MainActivity : Activity() {
             }
 
         val filled =
-            (percentage / 5)
-                .coerceIn(
-                    0,
-                    20
-                )
+            (
+                percentage / 5
+            ).coerceIn(
+                0,
+                20
+            )
 
         addCardTitle(
             card,
@@ -1785,6 +2088,7 @@ class MainActivity : Activity() {
             )
 
         button.setOnClickListener {
+
             showGoalDialog()
         }
 
@@ -1845,6 +2149,7 @@ class MainActivity : Activity() {
         if (
             total <= dailyGoal
         ) {
+
             return 100
         }
 
@@ -1962,12 +2267,18 @@ class MainActivity : Activity() {
 
         val app =
             trackedApps.maxByOrNull {
-                usage[it]?.minutes ?: 0L
-            } ?: return
+
+                usage[it]?.minutes
+                    ?: 0L
+            }
+                ?: return
 
         val result =
             usage[app]
-                ?: UsageResult(0L)
+                ?: UsageResult(
+                    0L,
+                    0
+                )
 
         val card =
             createCard(lightPurple)
@@ -2003,7 +2314,7 @@ class MainActivity : Activity() {
 
         addCardBody(
             card,
-            "Run a visible background break timer."
+            "Run a visible 5-minute break timer."
         )
 
         val button =
@@ -2013,17 +2324,17 @@ class MainActivity : Activity() {
 
         button.setOnClickListener {
 
-            val intent =
-                Intent(
-                    this,
-                    BreakTimerService::class.java
-                ).apply {
-
-                    action =
-                        BreakTimerService.ACTION_START
-                }
-
             try {
+
+                val intent =
+                    Intent(
+                        this,
+                        BreakTimerService::class.java
+                    ).apply {
+
+                        action =
+                            BreakTimerService.ACTION_START
+                    }
 
                 if (
                     Build.VERSION.SDK_INT >=
@@ -2078,12 +2389,17 @@ class MainActivity : Activity() {
 
         addCardBody(
             card,
-            "ScrollCheck uses Android UsageEvents foreground activity events."
+            "ScrollCheck measures foreground activity using Android UsageEvents."
         )
 
         addCardBody(
             card,
-            "Foreground intervals are clipped to the requested period and merged to reduce double-counting."
+            "Today's app values are calculated from foreground sessions from midnight until now."
+        )
+
+        addCardBody(
+            card,
+            "ScrollCheck does not invent or randomly estimate usage time."
         )
 
         addCard(card)
@@ -2106,7 +2422,7 @@ class MainActivity : Activity() {
 
             Toast.makeText(
                 this,
-                "Actual usage refreshed",
+                "Usage data refreshed",
                 Toast.LENGTH_SHORT
             ).show()
         }
@@ -2129,7 +2445,7 @@ class MainActivity : Activity() {
     }
 
     // =========================================================
-    // NOTIFICATIONS
+    // NOTIFICATION CHANNELS
     // =========================================================
 
     private fun createNotificationChannels() {
@@ -2138,6 +2454,7 @@ class MainActivity : Activity() {
             Build.VERSION.SDK_INT <
             Build.VERSION_CODES.O
         ) {
+
             return
         }
 
@@ -2161,26 +2478,6 @@ class MainActivity : Activity() {
                 NotificationManager.IMPORTANCE_LOW
             )
         )
-    }
-
-    private fun requestNotificationPermissionIfNeeded() {
-
-        if (
-            Build.VERSION.SDK_INT >=
-            Build.VERSION_CODES.TIRAMISU &&
-            checkSelfPermission(
-                Manifest.permission.POST_NOTIFICATIONS
-            ) !=
-            PackageManager.PERMISSION_GRANTED
-        ) {
-
-            requestPermissions(
-                arrayOf(
-                    Manifest.permission.POST_NOTIFICATIONS
-                ),
-                501
-            )
-        }
     }
 
     // =========================================================
@@ -2351,7 +2648,10 @@ class MainActivity : Activity() {
 
         parent.addView(
             View(this).apply {
-                setBackgroundColor(divider)
+
+                setBackgroundColor(
+                    divider
+                )
             },
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -2488,8 +2788,7 @@ class MainActivity : Activity() {
         return (
             value *
                 resources.displayMetrics.density
-            )
-            .roundToInt()
+        ).roundToInt()
     }
 
     private fun formatTime(
@@ -2516,18 +2815,14 @@ class MainActivity : Activity() {
 
     private fun addFooter() {
 
-        val formatter =
-            java.text.SimpleDateFormat(
+        val time =
+            SimpleDateFormat(
                 "h:mm a",
-                java.util.Locale.getDefault()
-            )
+                Locale.getDefault()
+            ).format(Date())
 
         addText(
-            "Last updated ${
-                formatter.format(
-                    java.util.Date()
-                )
-            }",
+            "Last updated $time",
             12,
             gray,
             false
