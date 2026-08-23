@@ -38,41 +38,46 @@ class MainActivity : Activity() {
 
     private var dailyGoal = 60L
 
-    data class TrackedApp(
+    data class AppInfo(
         val name: String,
         val packageName: String,
         val shortName: String,
-        val color: Int
+        val iconColor: Int
+    )
+
+    data class UsageResult(
+        val minutes: Long,
+        val sessions: Int
     )
 
     private val trackedApps = listOf(
 
-        TrackedApp(
+        AppInfo(
             "Instagram",
             "com.instagram.android",
             "IG",
             Color.rgb(220, 70, 120)
         ),
 
-        TrackedApp(
+        AppInfo(
             "YouTube",
             "com.google.android.youtube",
             "YT",
-            Color.rgb(220, 50, 50)
+            Color.rgb(220, 45, 45)
         ),
 
-        TrackedApp(
+        AppInfo(
             "WhatsApp",
             "com.whatsapp",
             "WA",
             Color.rgb(35, 175, 105)
         ),
 
-        TrackedApp(
+        AppInfo(
             "X",
             "com.twitter.android",
             "X",
-            Color.rgb(25, 30, 38)
+            Color.rgb(25, 30, 35)
         )
     )
 
@@ -86,13 +91,16 @@ class MainActivity : Activity() {
         Color.rgb(91, 88, 230)
 
     private val lightPurple =
-        Color.rgb(238, 238, 255)
+        Color.rgb(239, 238, 255)
 
     private val gray =
         Color.rgb(105, 112, 130)
 
+    private val white =
+        Color.WHITE
+
     private val divider =
-        Color.rgb(232, 234, 240)
+        Color.rgb(230, 232, 238)
 
     override fun onCreate(
         savedInstanceState: Bundle?
@@ -105,7 +113,7 @@ class MainActivity : Activity() {
                 60L
             )
 
-        createScreen()
+        buildScreen()
     }
 
     override fun onResume() {
@@ -120,34 +128,33 @@ class MainActivity : Activity() {
     // SCREEN
     // =========================================================
 
-    private fun createScreen() {
+    private fun buildScreen() {
 
-        root =
-            LinearLayout(this).apply {
+        root = LinearLayout(this).apply {
 
-                orientation =
-                    LinearLayout.VERTICAL
+            orientation =
+                LinearLayout.VERTICAL
 
-                setPadding(
-                    dp(18),
-                    dp(24),
-                    dp(18),
-                    dp(32)
-                )
+            setPadding(
+                dp(18),
+                dp(24),
+                dp(18),
+                dp(30)
+            )
 
-                setBackgroundColor(
-                    pageBackground
-                )
-            }
+            setBackgroundColor(
+                pageBackground
+            )
+        }
 
         val scroll =
             ScrollView(this).apply {
 
+                isFillViewport = true
+
                 setBackgroundColor(
                     pageBackground
                 )
-
-                isFillViewport = true
 
                 addView(root)
             }
@@ -168,27 +175,21 @@ class MainActivity : Activity() {
         addHeader()
 
         if (!hasUsageAccess()) {
-            addPermissionCard()
+            addAccessCard()
+            return
         }
 
         val usage =
-            trackedApps.associate {
-                it.name to
-                    getTodayUsage(
-                        it.packageName
-                    )
-            }
-
-        val sessions =
-            trackedApps.associate {
-                it.name to
-                    getTodaySessions(
-                        it.packageName
-                    )
+            trackedApps.associateWith { app ->
+                getTodayUsage(
+                    app.packageName
+                )
             }
 
         val total =
-            usage.values.sum()
+            usage.values.sumOf {
+                it.minutes
+            }
 
         addTodayCard(total)
 
@@ -196,10 +197,7 @@ class MainActivity : Activity() {
             "Tracked apps"
         )
 
-        addTrackedApps(
-            usage,
-            sessions
-        )
+        addTrackedApps(usage)
 
         addSectionTitle(
             "Daily goal"
@@ -214,18 +212,12 @@ class MainActivity : Activity() {
         addScoreCard(total)
 
         addSectionTitle(
-            "Most used app"
+            "Most used"
         )
 
         addMostUsedCard(usage)
 
-        addSectionTitle(
-            "7-day overview"
-        )
-
-        addWeeklyCard()
-
-        addDataNote()
+        addAccuracyCard()
 
         addRefreshButton()
 
@@ -238,12 +230,6 @@ class MainActivity : Activity() {
 
     private fun addHeader() {
 
-        val date =
-            SimpleDateFormat(
-                "EEEE, d MMMM",
-                Locale.getDefault()
-            ).format(Date())
-
         addText(
             "SCROLLCHECK",
             13,
@@ -252,14 +238,17 @@ class MainActivity : Activity() {
         )
 
         addText(
-            "Digital wellbeing",
-            30,
+            "Take control of your scroll.",
+            29,
             navy,
             true
         )
 
         addText(
-            date,
+            SimpleDateFormat(
+                "EEEE, d MMMM",
+                Locale.getDefault()
+            ).format(Date()),
             14,
             gray,
             false
@@ -269,7 +258,7 @@ class MainActivity : Activity() {
     }
 
     // =========================================================
-    // USAGE PERMISSION
+    // USAGE ACCESS
     // =========================================================
 
     private fun hasUsageAccess(): Boolean {
@@ -286,10 +275,10 @@ class MainActivity : Activity() {
         ) == AppOpsManager.MODE_ALLOWED
     }
 
-    private fun addPermissionCard() {
+    private fun addAccessCard() {
 
         val card =
-            createCard(Color.WHITE)
+            createCard(white)
 
         addCardTitle(
             card,
@@ -298,12 +287,12 @@ class MainActivity : Activity() {
 
         addCardBody(
             card,
-            "Android must allow ScrollCheck to read app usage before real usage data can be displayed."
+            "Allow ScrollCheck to read Android app usage so it can calculate actual foreground time."
         )
 
         val button =
             createButton(
-                "Grant usage access"
+                "Grant Usage Access"
             )
 
         button.setOnClickListener {
@@ -321,10 +310,10 @@ class MainActivity : Activity() {
     }
 
     // =========================================================
-    // TODAY USAGE
+    // START OF TODAY
     // =========================================================
 
-    private fun getStartOfDay(): Long {
+    private fun startOfToday(): Long {
 
         val calendar =
             Calendar.getInstance()
@@ -352,75 +341,174 @@ class MainActivity : Activity() {
         return calendar.timeInMillis
     }
 
+    // =========================================================
+    // ACTUAL USAGE CALCULATION
+    // =========================================================
+
     private fun getTodayUsage(
-        packageName: String
-    ): Long {
+        targetPackage: String
+    ): UsageResult {
 
         if (!hasUsageAccess()) {
-            return 0L
-        }
-
-        val manager =
-            getSystemService(
-                Context.USAGE_STATS_SERVICE
-            ) as UsageStatsManager
-
-        val stats =
-            manager.queryAndAggregateUsageStats(
-                getStartOfDay(),
-                System.currentTimeMillis()
+            return UsageResult(
+                0L,
+                0
             )
-
-        return (
-            stats[packageName]
-                ?.totalTimeInForeground
-                ?: 0L
-        ) / 60000L
-    }
-
-    // =========================================================
-    // REAL APP SESSIONS
-    // =========================================================
-
-    private fun getTodaySessions(
-        packageName: String
-    ): Int {
-
-        if (!hasUsageAccess()) {
-            return 0
         }
 
-        val manager =
+        val usageManager =
             getSystemService(
                 Context.USAGE_STATS_SERVICE
             ) as UsageStatsManager
+
+        val start =
+            startOfToday()
+
+        val end =
+            System.currentTimeMillis()
 
         val events =
-            manager.queryEvents(
-                getStartOfDay(),
-                System.currentTimeMillis()
+            usageManager.queryEvents(
+                start,
+                end
             )
 
         val event =
             UsageEvents.Event()
 
-        var count = 0
+        var foregroundStart =
+            -1L
 
-        while (events.hasNextEvent()) {
+        var totalMilliseconds =
+            0L
+
+        var sessions =
+            0
+
+        while (
+            events.hasNextEvent()
+        ) {
 
             events.getNextEvent(event)
 
             if (
-                event.packageName ==
-                packageName &&
-                event.eventType ==
-                UsageEvents.Event.ACTIVITY_RESUMED
+                event.packageName !=
+                targetPackage
             ) {
-                count++
+                continue
+            }
+
+            when (event.eventType) {
+
+                /*
+                 * Newer Android versions.
+                 */
+                UsageEvents.Event.ACTIVITY_RESUMED -> {
+
+                    if (
+                        foregroundStart < 0L
+                    ) {
+
+                        foregroundStart =
+                            event.timeStamp
+
+                        sessions++
+                    }
+                }
+
+                /*
+                 * Older Android versions.
+                 */
+                UsageEvents.Event.MOVE_TO_FOREGROUND -> {
+
+                    if (
+                        foregroundStart < 0L
+                    ) {
+
+                        foregroundStart =
+                            event.timeStamp
+
+                        sessions++
+                    }
+                }
+
+                /*
+                 * Newer Android versions.
+                 */
+                UsageEvents.Event.ACTIVITY_PAUSED -> {
+
+                    if (
+                        foregroundStart >= 0L
+                    ) {
+
+                        val duration =
+                            event.timeStamp -
+                                foregroundStart
+
+                        if (duration > 0L) {
+                            totalMilliseconds +=
+                                duration
+                        }
+
+                        foregroundStart =
+                            -1L
+                    }
+                }
+
+                /*
+                 * Older Android versions.
+                 */
+                UsageEvents.Event.MOVE_TO_BACKGROUND -> {
+
+                    if (
+                        foregroundStart >= 0L
+                    ) {
+
+                        val duration =
+                            event.timeStamp -
+                                foregroundStart
+
+                        if (duration > 0L) {
+                            totalMilliseconds +=
+                                duration
+                        }
+
+                        foregroundStart =
+                            -1L
+                    }
+                }
             }
         }
 
-        return count
+        /*
+         * If the app is currently open,
+         * count the unfinished session up to now.
+         */
+        if (
+            foregroundStart >= 0L
+        ) {
+
+            val duration =
+                end -
+                    foregroundStart
+
+            if (duration > 0L) {
+                totalMilliseconds +=
+                    duration
+            }
+        }
+
+        val minutes =
+            (
+                totalMilliseconds /
+                    60000.0
+            ).roundToInt()
+                .toLong()
+
+        return UsageResult(
+            minutes,
+            sessions
+        )
     }
 
     // =========================================================
@@ -436,10 +524,10 @@ class MainActivity : Activity() {
 
         addSmallText(
             card,
-            "TODAY'S TRACKED USAGE"
+            "TODAY'S TRACKED TIME"
         )
 
-        val totalText =
+        val time =
             TextView(this).apply {
 
                 text =
@@ -458,23 +546,26 @@ class MainActivity : Activity() {
 
                 setPadding(
                     0,
-                    dp(5),
+                    dp(6),
                     0,
                     dp(4)
                 )
             }
 
-        card.addView(totalText)
+        card.addView(time)
 
-        val message =
+        val status =
+            if (total <= dailyGoal) {
+                "✓ Within your goal"
+            } else {
+                "⚠ Above your goal"
+            }
+
+        val statusView =
             TextView(this).apply {
 
                 text =
-                    if (total <= dailyGoal) {
-                        "✓ Within your daily goal"
-                    } else {
-                        "⚠ Above your daily goal"
-                    }
+                    status
 
                 textSize = 14f
 
@@ -487,52 +578,30 @@ class MainActivity : Activity() {
                 )
             }
 
-        card.addView(message)
+        card.addView(statusView)
 
-        val goalText =
-            TextView(this).apply {
-
-                text =
-                    "Goal: ${formatTime(dailyGoal)}"
-
-                textSize = 13f
-
-                setTextColor(
-                    Color.rgb(
-                        180,
-                        187,
-                        202
-                    )
-                )
-
-                setPadding(
-                    0,
-                    dp(6),
-                    0,
-                    0
-                )
-            }
-
-        card.addView(goalText)
+        addCardBody(
+            card,
+            "Daily goal: ${formatTime(dailyGoal)}"
+        )
 
         addCard(card)
     }
 
     // =========================================================
-    // TRACKED APPS
+    // APP LIST
     // =========================================================
 
     private fun addTrackedApps(
-        usage: Map<String, Long>,
-        sessions: Map<String, Int>
+        usage: Map<AppInfo, UsageResult>
     ) {
 
         val card =
-            createCard(Color.WHITE)
+            createCard(white)
 
         val sorted =
             trackedApps.sortedByDescending {
-                usage[it.name] ?: 0L
+                usage[it]?.minutes ?: 0L
             }
 
         for (index in sorted.indices) {
@@ -540,17 +609,23 @@ class MainActivity : Activity() {
             val app =
                 sorted[index]
 
+            val result =
+                usage[app]
+                    ?: UsageResult(
+                        0L,
+                        0
+                    )
+
             addAppRow(
                 card,
                 app,
-                usage[app.name] ?: 0L,
-                sessions[app.name] ?: 0
+                result
             )
 
-            if (index <
+            if (
+                index <
                 sorted.lastIndex
             ) {
-
                 addDivider(card)
             }
         }
@@ -560,9 +635,8 @@ class MainActivity : Activity() {
 
     private fun addAppRow(
         parent: LinearLayout,
-        app: TrackedApp,
-        minutes: Long,
-        sessions: Int
+        app: AppInfo,
+        result: UsageResult
     ) {
 
         val row =
@@ -576,9 +650,9 @@ class MainActivity : Activity() {
 
                 setPadding(
                     0,
-                    dp(12),
+                    dp(13),
                     0,
-                    dp(12)
+                    dp(13)
                 )
             }
 
@@ -604,7 +678,7 @@ class MainActivity : Activity() {
 
                 background =
                     rounded(
-                        app.color,
+                        app.iconColor,
                         dp(14)
                     )
 
@@ -617,7 +691,7 @@ class MainActivity : Activity() {
 
         row.addView(icon)
 
-        val info =
+        val information =
             LinearLayout(this).apply {
 
                 orientation =
@@ -626,7 +700,7 @@ class MainActivity : Activity() {
                 setPadding(
                     dp(12),
                     0,
-                    dp(8),
+                    dp(6),
                     0
                 )
 
@@ -656,13 +730,13 @@ class MainActivity : Activity() {
                 )
             }
 
-        info.addView(name)
+        information.addView(name)
 
         val sessionText =
             TextView(this).apply {
 
                 text =
-                    "$sessions sessions today"
+                    "${result.sessions} sessions today"
 
                 textSize = 12f
 
@@ -678,15 +752,17 @@ class MainActivity : Activity() {
                 )
             }
 
-        info.addView(sessionText)
+        information.addView(sessionText)
 
-        row.addView(info)
+        row.addView(information)
 
         val time =
             TextView(this).apply {
 
                 text =
-                    formatTime(minutes)
+                    formatTime(
+                        result.minutes
+                    )
 
                 textSize = 16f
 
@@ -714,95 +790,47 @@ class MainActivity : Activity() {
     ) {
 
         val card =
-            createCard(Color.WHITE)
-
-        val titleRow =
-            LinearLayout(this).apply {
-
-                orientation =
-                    LinearLayout.HORIZONTAL
-
-                gravity =
-                    Gravity.CENTER_VERTICAL
-            }
-
-        val title =
-            TextView(this).apply {
-
-                text =
-                    "Daily target"
-
-                textSize = 17f
-
-                setTextColor(
-                    navy
-                )
-
-                setTypeface(
-                    typeface,
-                    Typeface.BOLD
-                )
-
-                layoutParams =
-                    LinearLayout.LayoutParams(
-                        0,
-                        dp(35),
-                        1f
-                    )
-            }
-
-        titleRow.addView(title)
-
-        val goal =
-            TextView(this).apply {
-
-                text =
-                    formatTime(
-                        dailyGoal
-                    )
-
-                textSize = 17f
-
-                setTextColor(
-                    purple
-                )
-
-                setTypeface(
-                    typeface,
-                    Typeface.BOLD
-                )
-            }
-
-        titleRow.addView(goal)
-
-        card.addView(titleRow)
+            createCard(white)
 
         val percentage =
-            if (dailyGoal > 0) {
+            if (dailyGoal > 0L) {
 
                 (
                     total.toDouble() /
-                        dailyGoal *
-                        100
-                )
-                    .roundToInt()
-                    .coerceIn(
-                        0,
-                        100
-                    )
+                        dailyGoal.toDouble() *
+                        100.0
+                ).roundToInt()
 
             } else {
                 0
             }
 
+        val filled =
+            (
+                percentage / 5
+            ).coerceIn(
+                0,
+                20
+            )
+
+        addCardTitle(
+            card,
+            "🎯 Daily goal"
+        )
+
+        addCardBody(
+            card,
+            "${formatTime(total)} used of ${formatTime(dailyGoal)}"
+        )
+
         val progress =
             TextView(this).apply {
 
-                text = (
-    "█".repeat(percentage / 5) +
-    "░".repeat(20 - (percentage / 5)
-              )
-)
+                text =
+                    "█".repeat(filled) +
+                    "░".repeat(
+                        20 - filled
+                    )
 
                 textSize = 12f
 
@@ -812,18 +840,13 @@ class MainActivity : Activity() {
 
                 setPadding(
                     0,
-                    dp(10),
+                    dp(5),
                     0,
-                    dp(5)
+                    dp(8)
                 )
             }
 
         card.addView(progress)
-
-        addCardBody(
-            card,
-            "${formatTime(total)} used • $percentage% of goal"
-        )
 
         val button =
             createButton(
@@ -856,19 +879,15 @@ class MainActivity : Activity() {
             )
             .setItems(
                 choices
-            ) { _, position ->
+            ) { _, which ->
 
                 dailyGoal =
-                    when (position) {
+                    when (which) {
 
                         0 -> 30L
-
                         1 -> 45L
-
                         2 -> 60L
-
                         3 -> 90L
-
                         else -> 120L
                     }
 
@@ -892,27 +911,18 @@ class MainActivity : Activity() {
         total: Long
     ): Int {
 
-        if (total == 0L) {
+        if (total <= dailyGoal) {
             return 100
         }
 
-        var score =
-            100.0
+        val excess =
+            total - dailyGoal
 
-        if (total > dailyGoal) {
-
-            score -=
-                (
-                    total -
-                        dailyGoal
-                ) * 0.35
-        }
-
-        if (total > 120) {
-            score -= 10
-        }
-
-        return score
+        return (
+            100.0 -
+                excess.toDouble() *
+                0.35
+        )
             .roundToInt()
             .coerceIn(
                 0,
@@ -925,12 +935,12 @@ class MainActivity : Activity() {
     ) {
 
         val card =
-            createCard(Color.WHITE)
+            createCard(white)
 
         val score =
             calculateScore(total)
 
-        val scoreText =
+        val number =
             TextView(this).apply {
 
                 text =
@@ -951,9 +961,9 @@ class MainActivity : Activity() {
                 )
             }
 
-        card.addView(scoreText)
+        card.addView(number)
 
-        val label =
+        val outOf =
             TextView(this).apply {
 
                 text =
@@ -969,26 +979,29 @@ class MainActivity : Activity() {
                 )
             }
 
-        card.addView(label)
+        card.addView(outOf)
 
         val status =
+            when {
+
+                score >= 80 ->
+                    "🟢 Excellent"
+
+                score >= 60 ->
+                    "🟡 Good"
+
+                score >= 40 ->
+                    "🟠 Needs attention"
+
+                else ->
+                    "🔴 Take a break"
+            }
+
+        val statusView =
             TextView(this).apply {
 
                 text =
-                    when {
-
-                        score >= 80 ->
-                            "🟢 Excellent balance"
-
-                        score >= 60 ->
-                            "🟡 Good balance"
-
-                        score >= 40 ->
-                            "🟠 Needs attention"
-
-                        else ->
-                            "🔴 Time for a reset"
-                    }
+                    status
 
                 textSize = 15f
 
@@ -1001,13 +1014,13 @@ class MainActivity : Activity() {
 
                 setPadding(
                     0,
-                    dp(7),
+                    dp(8),
                     0,
                     0
                 )
             }
 
-        card.addView(status)
+        card.addView(statusView)
 
         addCard(card)
     }
@@ -1017,20 +1030,21 @@ class MainActivity : Activity() {
     // =========================================================
 
     private fun addMostUsedCard(
-        usage: Map<String, Long>
+        usage: Map<AppInfo, UsageResult>
     ) {
 
         val app =
             trackedApps.maxByOrNull {
-                usage[it.name] ?: 0L
+                usage[it]?.minutes ?: 0L
             }
+                ?: return
 
-        if (app == null) {
-            return
-        }
-
-        val minutes =
-            usage[app.name] ?: 0L
+        val result =
+            usage[app]
+                ?: UsageResult(
+                    0L,
+                    0
+                )
 
         val card =
             createCard(
@@ -1044,260 +1058,34 @@ class MainActivity : Activity() {
 
         addCardBody(
             card,
-            "Most used tracked app today • ${formatTime(minutes)}"
+            "Most used tracked app today • ${formatTime(result.minutes)}"
         )
 
         addCard(card)
     }
 
     // =========================================================
-    // WEEKLY DATA
+    // ACCURACY INFORMATION
     // =========================================================
 
-    private fun getDayUsage(
-        offset: Int
-    ): Long {
-
-        if (!hasUsageAccess()) {
-            return 0L
-        }
-
-        val day =
-            Calendar.getInstance()
-
-        day.add(
-            Calendar.DAY_OF_YEAR,
-            offset
-        )
-
-        day.set(
-            Calendar.HOUR_OF_DAY,
-            0
-        )
-
-        day.set(
-            Calendar.MINUTE,
-            0
-        )
-
-        day.set(
-            Calendar.SECOND,
-            0
-        )
-
-        day.set(
-            Calendar.MILLISECOND,
-            0
-        )
-
-        val start =
-            day.timeInMillis
-
-        val end =
-            if (offset == 0) {
-
-                System.currentTimeMillis()
-
-            } else {
-
-                val tomorrow =
-                    day.clone()
-                        as Calendar
-
-                tomorrow.add(
-                    Calendar.DAY_OF_YEAR,
-                    1
-                )
-
-                tomorrow.timeInMillis
-            }
-
-        val manager =
-            getSystemService(
-                Context.USAGE_STATS_SERVICE
-            ) as UsageStatsManager
-
-        val stats =
-            manager.queryAndAggregateUsageStats(
-                start,
-                end
-            )
-
-        var total =
-            0L
-
-        for (app in trackedApps) {
-
-            total += (
-                stats[
-                    app.packageName
-                ]?.totalTimeInForeground
-                    ?: 0L
-            ) / 60000L
-        }
-
-        return total
-    }
-
-    private fun addWeeklyCard() {
+    private fun addAccuracyCard() {
 
         val card =
-            createCard(Color.WHITE)
-
-        val values =
-            ArrayList<Long>()
-
-        for (i in -6..0) {
-
-            values.add(
-                getDayUsage(i)
-            )
-        }
-
-        val maximum =
-            (values.maxOrNull() ?: 1L)
-                .coerceAtLeast(1L)
-
-        for (i in values.indices) {
-
-            val row =
-                LinearLayout(this).apply {
-
-                    orientation =
-                        LinearLayout.HORIZONTAL
-
-                    gravity =
-                        Gravity.CENTER_VERTICAL
-
-                    setPadding(
-                        0,
-                        dp(5),
-                        0,
-                        dp(5)
-                    )
-                }
-
-            val day =
-                Calendar.getInstance()
-
-            day.add(
-                Calendar.DAY_OF_YEAR,
-                -6 + i
-            )
-
-            val dayName =
-                SimpleDateFormat(
-                    "EEE",
-                    Locale.getDefault()
-                ).format(
-                    day.time
-                )
-
-            val label =
-                TextView(this).apply {
-
-                    text =
-                        dayName
-
-                    textSize = 12f
-
-                    setTextColor(
-                        gray
-                    )
-
-                    layoutParams =
-                        LinearLayout.LayoutParams(
-                            dp(40),
-                            dp(30)
-                        )
-                }
-
-            row.addView(label)
-
-            val barLength =
-                (
-                    values[i].toDouble() /
-                        maximum *
-                        18
-                )
-                    .roundToInt()
-                    .coerceAtLeast(
-                        if (values[i] > 0) 1
-                        else 0
-                    )
-
-            val bar =
-                TextView(this).apply {
-
-                    text =
-                        "█".repeat(
-                            barLength
-                        )
-
-                    textSize = 14f
-
-                    setTextColor(
-                        purple
-                    )
-
-                    layoutParams =
-                        LinearLayout.LayoutParams(
-                            0,
-                            dp(30),
-                            1f
-                        )
-                }
-
-            row.addView(bar)
-
-            val time =
-                TextView(this).apply {
-
-                    text =
-                        formatTime(
-                            values[i]
-                        )
-
-                    textSize = 11f
-
-                    setTextColor(
-                        gray
-                    )
-                }
-
-            row.addView(time)
-
-            card.addView(row)
-        }
-
-        val weekTotal =
-            values.sum()
-
-        addCardBody(
-            card,
-            "This week: ${formatTime(weekTotal)}"
-        )
-
-        addCard(card)
-    }
-
-    // =========================================================
-    // DATA NOTE
-    // =========================================================
-
-    private fun addDataNote() {
-
-        val card =
-            createCard(Color.WHITE)
+            createCard(white)
 
         addCardTitle(
             card,
-            "About the data"
+            "ℹ️ How ScrollCheck measures time"
         )
 
         addCardBody(
             card,
-            "Usage time comes directly from Android Usage Stats. Sessions represent Android app-resume events. Android does not provide an exact count of individual feed swipes, so ScrollCheck does not pretend that it does."
+            "App time is calculated from Android Usage Events when the tracked app enters and leaves the foreground."
+        )
+
+        addCardBody(
+            card,
+            "ScrollCheck does not invent screen-time numbers or estimate individual swipes."
         )
 
         addCard(card)
@@ -1311,7 +1099,7 @@ class MainActivity : Activity() {
 
         val button =
             createButton(
-                "↻  Refresh data"
+                "↻  Refresh actual usage"
             )
 
         button.setOnClickListener {
@@ -1320,7 +1108,7 @@ class MainActivity : Activity() {
 
             Toast.makeText(
                 this,
-                "Data refreshed",
+                "Usage data refreshed",
                 Toast.LENGTH_SHORT
             ).show()
         }
@@ -1334,7 +1122,7 @@ class MainActivity : Activity() {
 
                 setMargins(
                     0,
-                    dp(12),
+                    dp(8),
                     0,
                     dp(8)
                 )
@@ -1396,14 +1184,14 @@ class MainActivity : Activity() {
 
     private fun addCardTitle(
         card: LinearLayout,
-        title: String
+        value: String
     ) {
 
         val text =
             TextView(this).apply {
 
                 this.text =
-                    title
+                    value
 
                 textSize = 17f
 
@@ -1422,14 +1210,14 @@ class MainActivity : Activity() {
 
     private fun addCardBody(
         card: LinearLayout,
-        body: String
+        value: String
     ) {
 
         val text =
             TextView(this).apply {
 
                 this.text =
-                    body
+                    value
 
                 textSize = 13f
 
@@ -1441,7 +1229,7 @@ class MainActivity : Activity() {
                     0,
                     dp(6),
                     0,
-                    dp(8)
+                    dp(7)
                 )
             }
 
@@ -1478,6 +1266,38 @@ class MainActivity : Activity() {
         card.addView(text)
     }
 
+    private fun addSectionTitle(
+        value: String
+    ) {
+
+        val text =
+            TextView(this).apply {
+
+                this.text =
+                    value
+
+                textSize = 20f
+
+                setTextColor(
+                    navy
+                )
+
+                setTypeface(
+                    typeface,
+                    Typeface.BOLD
+                )
+
+                setPadding(
+                    0,
+                    dp(14),
+                    0,
+                    dp(7)
+                )
+            }
+
+        root.addView(text)
+    }
+
     private fun addDivider(
         parent: LinearLayout
     ) {
@@ -1495,46 +1315,14 @@ class MainActivity : Activity() {
         )
     }
 
-    private fun addSectionTitle(
-        title: String
-    ) {
-
-        val text =
-            TextView(this).apply {
-
-                this.text =
-                    title
-
-                textSize = 20f
-
-                setTextColor(
-                    navy
-                )
-
-                setTypeface(
-                    typeface,
-                    Typeface.BOLD
-                )
-
-                setPadding(
-                    0,
-                    dp(15),
-                    0,
-                    dp(7)
-                )
-            }
-
-        root.addView(text)
-    }
-
     private fun createButton(
-        text: String
+        value: String
     ): Button {
 
         return Button(this).apply {
 
-            this.text =
-                text
+            text =
+                value
 
             textSize = 13f
 
@@ -1548,8 +1336,7 @@ class MainActivity : Activity() {
                     dp(13)
                 )
 
-            stateListAnimator =
-                null
+            stateListAnimator = null
         }
     }
 
@@ -1593,14 +1380,14 @@ class MainActivity : Activity() {
     }
 
     private fun space(
-        height: Int
+        value: Int
     ) {
 
         root.addView(
             View(this),
             LinearLayout.LayoutParams(
                 1,
-                dp(height)
+                dp(value)
             )
         )
     }
@@ -1634,15 +1421,17 @@ class MainActivity : Activity() {
     ): String {
 
         val hours =
-            minutes / 60
+            minutes / 60L
 
-        val mins =
-            minutes % 60
+        val remainingMinutes =
+            minutes % 60L
 
-        return if (hours > 0) {
-            "${hours}h ${mins}m"
+        return if (
+            hours > 0L
+        ) {
+            "${hours}h ${remainingMinutes}m"
         } else {
-            "$mins min"
+            "$remainingMinutes min"
         }
     }
 
