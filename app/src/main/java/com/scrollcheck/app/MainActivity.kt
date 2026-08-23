@@ -798,21 +798,11 @@ class MainActivity : Activity() {
         val progress =
             TextView(this).apply {
 
-                text =
-                    "████████████████████"
-                        .take(
-                            percentage /
-                                5
-                        )
-                    +
-                    "░░░░░░░░░░░░░░░░░░░░"
-                        .take(
-                            20 -
-                                (
-                                    percentage /
-                                        5
-                                )
-                        )
+                text = (
+    "█".repeat(percentage / 5) +
+    "░".repeat(20 - (percentage / 5)
+              )
+)
 
                 textSize = 12f
 
