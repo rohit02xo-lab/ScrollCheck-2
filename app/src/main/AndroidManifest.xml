@@ -1,21 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Android app-usage statistics access -->
-    <uses-permission
-        android:name="android.permission.PACKAGE_USAGE_STATS" />
+    <!-- Required for Android UsageStatsManager -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
 
-    <!-- Goal warning notifications -->
-    <uses-permission
-        android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Required for goal notifications on Android 13+ -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- Background break timer -->
-    <uses-permission
-        android:name="android.permission.FOREGROUND_SERVICE" />
-
-    <!-- Required for the special-use foreground service -->
-    <uses-permission
-        android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- Required for the background break timer -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
     <application
         android:allowBackup="false"
@@ -23,32 +16,20 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.ScrollCheck">
 
-        <!-- Main ScrollCheck screen -->
         <activity
             android:name=".MainActivity"
             android:exported="true">
 
             <intent-filter>
-                <action
-                    android:name="android.intent.action.MAIN" />
-
-                <category
-                    android:name="android.intent.category.LAUNCHER" />
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
         </activity>
 
-        <!-- Background 5-minute break timer -->
         <service
             android:name=".BreakTimerService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="user initiated break timer" />
-
-        </service>
+            android:exported="false" />
 
     </application>
 
