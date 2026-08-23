@@ -805,9 +805,4 @@ class MainActivity : Activity() {
             ).roundToInt()
     }
 }
-EOF
-git add app/src/main/java/com/scrollcheck/app/MainActivity.kt
-git commit -m "Add ScrollPoints streaks and levels"
-git push origin main
 
-}
