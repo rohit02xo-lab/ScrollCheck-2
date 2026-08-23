@@ -1,7 +1,7 @@
+cd ScrollCheck-2 && git checkout main && git pull && rm -f app/src/main/java/com/scrollcheck/app/MainActivity.kt && cat > app/src/main/java/com/scrollcheck/app/MainActivity.kt <<'EOF'
 package com.scrollcheck.app
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.app.AppOpsManager
 import android.app.usage.UsageStatsManager
 import android.content.Context
@@ -35,11 +35,18 @@ class MainActivity : Activity() {
     }
 
     private var dailyGoal = 60L
+    private var scrollPoints = 0
+    private var streak = 0
+    private var lastCompletedDate = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         dailyGoal = prefs.getLong("daily_goal", 60L)
+        scrollPoints = prefs.getInt("scroll_points", 0)
+        streak = prefs.getInt("streak", 0)
+        lastCompletedDate =
+            prefs.getString("last_completed_date", "") ?: ""
 
         buildUi()
     }
@@ -52,10 +59,6 @@ class MainActivity : Activity() {
         }
     }
 
-    // -----------------------------
-    // USAGE ACCESS
-    // -----------------------------
-
     private fun hasUsageAccess(): Boolean {
 
         val appOps =
@@ -67,10 +70,6 @@ class MainActivity : Activity() {
             packageName
         ) == AppOpsManager.MODE_ALLOWED
     }
-
-    // -----------------------------
-    // TODAY'S USAGE
-    // -----------------------------
 
     private fun todayUsage(packageName: String): Long {
 
@@ -95,14 +94,9 @@ class MainActivity : Activity() {
         return (stats[packageName]?.totalTimeInForeground ?: 0L) / 60000L
     }
 
-    // -----------------------------
-    // MAIN UI
-    // -----------------------------
-
     private fun buildUi() {
 
         root = LinearLayout(this).apply {
-
             orientation = LinearLayout.VERTICAL
 
             setPadding(
@@ -118,7 +112,6 @@ class MainActivity : Activity() {
         }
 
         val scrollView = ScrollView(this)
-
         scrollView.addView(root)
 
         setContentView(scrollView)
@@ -131,12 +124,8 @@ class MainActivity : Activity() {
         root.removeAllViews()
 
         val youtube = todayUsage(youtubePackage)
-
         val instagram = todayUsage(instagramPackage)
-
         val total = youtube + instagram
-
-        // HEADER
 
         addText(
             "SCROLLCHECK",
@@ -161,8 +150,6 @@ class MainActivity : Activity() {
 
         space(10)
 
-        // ACCESS CARD
-
         if (!hasUsageAccess()) {
 
             addCard(
@@ -170,14 +157,11 @@ class MainActivity : Activity() {
                 "Android needs permission before ScrollCheck can measure YouTube and Instagram usage.",
                 "Grant Access"
             ) {
-
                 startActivity(
                     Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
                 )
             }
         }
-
-        // TODAY CARD
 
         addSectionTitle("Today's Scroll")
 
@@ -190,15 +174,11 @@ class MainActivity : Activity() {
             }
         )
 
-        // SCORE
-
         val score = calculateScore(total)
 
         addSectionTitle("Scroll Balance")
 
         addScoreCard(score)
-
-        // APP BREAKDOWN
 
         addSectionTitle("Where You Scrolled")
 
@@ -211,8 +191,6 @@ class MainActivity : Activity() {
             "📸 Instagram",
             instagram
         )
-
-        // CATEGORY ESTIMATE
 
         addSectionTitle("Usage Categories")
 
@@ -248,8 +226,6 @@ class MainActivity : Activity() {
             estimatedUnclassified
         )
 
-        // INSIGHT
-
         addSectionTitle("Your Insight")
 
         addFeedback(
@@ -259,13 +235,13 @@ class MainActivity : Activity() {
             estimatedEntertainment
         )
 
-        // GOAL
-
         addSectionTitle("🎯 Daily Goal")
 
-        addGoalCard()
+        addGoalCard(total)
 
-        // REFRESH
+        addSectionTitle("🏆 Rewards")
+
+        addRewardsCard(total)
 
         val refreshButton = Button(this).apply {
 
@@ -297,10 +273,6 @@ class MainActivity : Activity() {
         )
     }
 
-    // -----------------------------
-    // SCORE
-    // -----------------------------
-
     private fun calculateScore(total: Long): Int {
 
         if (total == 0L) return 100
@@ -310,12 +282,10 @@ class MainActivity : Activity() {
         if (total > dailyGoal) {
 
             val excess = total - dailyGoal
-
             score -= excess * 0.35
         }
 
         if (total > 120) {
-
             score -= 10
         }
 
@@ -342,10 +312,6 @@ class MainActivity : Activity() {
         }
     }
 
-    // -----------------------------
-    // SCORE CARD
-    // -----------------------------
-
     private fun addScoreCard(score: Int) {
 
         val box = createCard()
@@ -353,7 +319,6 @@ class MainActivity : Activity() {
         val scoreText = TextView(this).apply {
 
             text = "$score / 100"
-
             textSize = 36f
 
             setTextColor(
@@ -371,9 +336,7 @@ class MainActivity : Activity() {
         val status = TextView(this).apply {
 
             text = scoreStatus(score)
-
             textSize = 16f
-
             gravity = Gravity.CENTER
 
             setPadding(
@@ -385,7 +348,6 @@ class MainActivity : Activity() {
         }
 
         box.addView(scoreText)
-
         box.addView(status)
 
         root.addView(
@@ -393,10 +355,6 @@ class MainActivity : Activity() {
             cardParams()
         )
     }
-
-    // -----------------------------
-    // FEEDBACK
-    // -----------------------------
 
     private fun addFeedback(
         total: Long,
@@ -441,18 +399,13 @@ class MainActivity : Activity() {
         ) {}
     }
 
-    // -----------------------------
-    // GOAL
-    // -----------------------------
-
-    private fun addGoalCard() {
+    private fun addGoalCard(total: Long) {
 
         val box = createCard()
 
         val goalText = TextView(this).apply {
 
             text = "Daily goal: $dailyGoal minutes"
-
             textSize = 18f
 
             setTextColor(
@@ -471,7 +424,8 @@ class MainActivity : Activity() {
 
             max = 180
 
-            progress = dailyGoal.toInt()
+            progress =
+                dailyGoal.toInt().coerceIn(0, 180)
 
             setOnSeekBarChangeListener(
                 object : SeekBar.OnSeekBarChangeListener {
@@ -514,15 +468,211 @@ class MainActivity : Activity() {
 
         box.addView(seek)
 
+        val status = TextView(this).apply {
+
+            text = when {
+                total == 0L ->
+                    "📱 No tracked usage yet."
+
+                total <= dailyGoal ->
+                    "✅ You are currently within your goal."
+
+                else ->
+                    "⚠️ You have exceeded today's goal."
+            }
+
+            textSize = 14f
+            setTextColor(Color.DKGRAY)
+
+            setPadding(
+                0,
+                dp(8),
+                0,
+                0
+            )
+        }
+
+        box.addView(status)
+
         root.addView(
             box,
             cardParams()
         )
     }
 
-    // -----------------------------
-    // USAGE CARD
-    // -----------------------------
+    private fun addRewardsCard(total: Long) {
+
+        val box = createCard()
+
+        val completedToday =
+            lastCompletedDate == todayKey()
+
+        val goalCompleted =
+            total > 0 && total <= dailyGoal
+
+        val title = TextView(this).apply {
+
+            text = "🔥 $streak Day Streak"
+            textSize = 22f
+
+            setTextColor(
+                Color.rgb(23, 32, 51)
+            )
+
+            setTypeface(
+                typeface,
+                android.graphics.Typeface.BOLD
+            )
+        }
+
+        val pointsText = TextView(this).apply {
+
+            text = "⭐ $scrollPoints ScrollPoints"
+            textSize = 18f
+
+            setTextColor(
+                Color.rgb(23, 32, 51)
+            )
+
+            setPadding(
+                0,
+                dp(8),
+                0,
+                dp(4)
+            )
+        }
+
+        val levelText = TextView(this).apply {
+
+            text = getLevelText()
+            textSize = 15f
+
+            setTextColor(Color.DKGRAY)
+
+            setPadding(
+                0,
+                dp(4),
+                0,
+                dp(10)
+            )
+        }
+
+        box.addView(title)
+        box.addView(pointsText)
+        box.addView(levelText)
+
+        if (goalCompleted && !completedToday) {
+
+            val button = Button(this).apply {
+
+                text = "✅ Complete Today's Goal"
+
+                setOnClickListener {
+
+                    completeTodayGoal()
+
+                    refreshDashboard()
+
+                    Toast.makeText(
+                        this@MainActivity,
+                        "+50 ScrollPoints! 🎉",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+
+            box.addView(button)
+
+        } else if (completedToday) {
+
+            val completedText = TextView(this).apply {
+
+                text = "🎉 Today's goal completed!"
+                textSize = 15f
+
+                setTextColor(
+                    Color.rgb(40, 130, 70)
+                )
+            }
+
+            box.addView(completedText)
+
+        } else {
+
+            val info = TextView(this).apply {
+
+                text =
+                    "Complete your daily goal to earn +50 ScrollPoints."
+
+                textSize = 14f
+                setTextColor(Color.DKGRAY)
+            }
+
+            box.addView(info)
+        }
+
+        root.addView(
+            box,
+            cardParams()
+        )
+    }
+
+    private fun completeTodayGoal() {
+
+        val today = todayKey()
+
+        if (lastCompletedDate == today) {
+            return
+        }
+
+        streak++
+        scrollPoints += 50
+        lastCompletedDate = today
+
+        prefs.edit()
+            .putInt(
+                "scroll_points",
+                scrollPoints
+            )
+            .putInt(
+                "streak",
+                streak
+            )
+            .putString(
+                "last_completed_date",
+                lastCompletedDate
+            )
+            .apply()
+    }
+
+    private fun getLevelText(): String {
+
+        return when {
+
+            scrollPoints >= 500 ->
+                "🏆 Level 5 — Focus Champion"
+
+            scrollPoints >= 300 ->
+                "🌟 Level 4 — Focus Master"
+
+            scrollPoints >= 150 ->
+                "🌳 Level 3 — Focus Builder"
+
+            scrollPoints >= 50 ->
+                "⭐ Level 2 — Getting Focused"
+
+            else ->
+                "🌱 Level 1 — Starting Out"
+        }
+    }
+
+    private fun todayKey(): String {
+
+        return SimpleDateFormat(
+            "yyyy-MM-dd",
+            Locale.getDefault()
+        ).format(Date())
+    }
 
     private fun addUsageCard(
         name: String,
@@ -534,7 +684,6 @@ class MainActivity : Activity() {
         val title = TextView(this).apply {
 
             text = name
-
             textSize = 18f
 
             setTextColor(
@@ -550,7 +699,6 @@ class MainActivity : Activity() {
         val time = TextView(this).apply {
 
             text = "$minutes minutes today"
-
             textSize = 15f
 
             setTextColor(Color.DKGRAY)
@@ -564,7 +712,6 @@ class MainActivity : Activity() {
         }
 
         box.addView(title)
-
         box.addView(time)
 
         root.addView(
@@ -572,10 +719,6 @@ class MainActivity : Activity() {
             cardParams()
         )
     }
-
-    // -----------------------------
-    // CATEGORY
-    // -----------------------------
 
     private fun addCategory(
         name: String,
@@ -586,8 +729,7 @@ class MainActivity : Activity() {
 
         val text = TextView(this).apply {
 
-            text = "$name     $minutes min"
-
+            this.text = "$name     $minutes min"
             textSize = 16f
 
             setTextColor(
@@ -603,10 +745,6 @@ class MainActivity : Activity() {
         )
     }
 
-    // -----------------------------
-    // BIG CARD
-    // -----------------------------
-
     private fun addBigCard(
         title: String,
         subtitle: String
@@ -617,7 +755,6 @@ class MainActivity : Activity() {
         val titleText = TextView(this).apply {
 
             text = title
-
             textSize = 30f
 
             setTextColor(
@@ -633,7 +770,6 @@ class MainActivity : Activity() {
         val sub = TextView(this).apply {
 
             text = subtitle
-
             textSize = 15f
 
             setTextColor(Color.DKGRAY)
@@ -647,7 +783,6 @@ class MainActivity : Activity() {
         }
 
         box.addView(titleText)
-
         box.addView(sub)
 
         root.addView(
@@ -656,18 +791,11 @@ class MainActivity : Activity() {
         )
     }
 
-    // -----------------------------
-    // SECTION TITLE
-    // -----------------------------
-
-    private fun addSectionTitle(
-        title: String
-    ) {
+    private fun addSectionTitle(title: String) {
 
         val text = TextView(this).apply {
 
             this.text = title
-
             textSize = 20f
 
             setTextColor(
@@ -690,10 +818,6 @@ class MainActivity : Activity() {
         root.addView(text)
     }
 
-    // -----------------------------
-    // GENERIC CARD
-    // -----------------------------
-
     private fun addCard(
         title: String,
         body: String,
@@ -706,7 +830,6 @@ class MainActivity : Activity() {
         val titleText = TextView(this).apply {
 
             text = title
-
             textSize = 19f
 
             setTextColor(
@@ -722,7 +845,6 @@ class MainActivity : Activity() {
         val bodyText = TextView(this).apply {
 
             text = body
-
             textSize = 14f
 
             setTextColor(Color.DKGRAY)
@@ -745,9 +867,7 @@ class MainActivity : Activity() {
         }
 
         box.addView(titleText)
-
         box.addView(bodyText)
-
         box.addView(buttonView)
 
         root.addView(
@@ -755,10 +875,6 @@ class MainActivity : Activity() {
             cardParams()
         )
     }
-
-    // -----------------------------
-    // CARD HELPERS
-    // -----------------------------
 
     private fun createCard(): LinearLayout {
 
@@ -798,6 +914,37 @@ class MainActivity : Activity() {
         return params
     }
 
+    private fun addText(
+        value: String,
+        size: Int,
+        color: Int,
+        bold: Boolean
+    ) {
+
+        val textView = TextView(this).apply {
+
+            text = value
+            textSize = size.toFloat()
+            setTextColor(color)
+
+            if (bold) {
+                setTypeface(
+                    typeface,
+                    android.graphics.Typeface.BOLD
+                )
+            }
+
+            setPadding(
+                0,
+                dp(10),
+                0,
+                dp(10)
+            )
+        }
+
+        root.addView(textView)
+    }
+
     private fun space(height: Int) {
 
         val view = View(this)
@@ -816,34 +963,8 @@ class MainActivity : Activity() {
         return (
             value *
                     resources.displayMetrics.density
-            ).roundToInt()
+        ).roundToInt()
     }
-private fun addText(
-    value: String,
-    size: Int,
-    color: Int,
-    bold: Boolean
-) {
-    val textView = TextView(this).apply {
-        text = value
-        textSize = size.toFloat()
-        setTextColor(color)
-
-        if (bold) {
-            setTypeface(
-                typeface,
-                android.graphics.Typeface.BOLD
-            )
-        }
-
-        setPadding(
-            0,
-            dp(10),
-            0,
-            dp(10)
-        )
-    }
-
-    root.addView(textView)
 }
-}
+EOF
+git add app/src/main/java/com/scrollcheck/app/MainActivity.kt && git commit -m "Add ScrollPoints streaks and levels" && git push origin main
