@@ -25,11 +25,11 @@ class BreakTimerService : Service() {
         private const val NOTIFICATION_ID =
             9001
 
-        private const val FINISHED_NOTIFICATION_ID =
+        private const val COMPLETE_NOTIFICATION_ID =
             9002
 
         private const val BREAK_TIME =
-            5L * 60L * 1000L
+            5 * 60 * 1000L
     }
 
     private var endTime = 0L
@@ -65,6 +65,7 @@ class BreakTimerService : Service() {
         }
 
     override fun onCreate() {
+
         super.onCreate()
 
         createChannel()
@@ -80,6 +81,7 @@ class BreakTimerService : Service() {
             intent?.action ==
             ACTION_START
         ) {
+
             startTimer()
         }
 
@@ -97,13 +99,9 @@ class BreakTimerService : Service() {
                 BREAK_TIME
             )
 
-        /*
-         * Android 14+ requires the foreground
-         * service type declared in the Manifest.
-         */
         if (
             Build.VERSION.SDK_INT >=
-            Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+            Build.VERSION_CODES.Q
         ) {
 
             startForeground(
@@ -137,7 +135,9 @@ class BreakTimerService : Service() {
 
         manager.notify(
             NOTIFICATION_ID,
-            buildNotification(remaining)
+            buildNotification(
+                remaining
+            )
         )
     }
 
@@ -145,21 +145,21 @@ class BreakTimerService : Service() {
         remaining: Long
     ): Notification {
 
-        val totalSeconds =
+        val seconds =
             remaining / 1000L
 
         val minutes =
-            totalSeconds / 60L
+            seconds / 60L
 
-        val seconds =
-            totalSeconds % 60L
+        val secs =
+            seconds % 60L
 
         val time =
             String.format(
                 java.util.Locale.getDefault(),
                 "%02d:%02d",
                 minutes,
-                seconds
+                secs
             )
 
         val intent =
@@ -195,7 +195,6 @@ class BreakTimerService : Service() {
             )
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setShowWhen(false)
             .build()
     }
 
@@ -212,7 +211,8 @@ class BreakTimerService : Service() {
             NOTIFICATION_ID
         )
 
-        val finished =
+        manager.notify(
+            COMPLETE_NOTIFICATION_ID,
             Notification.Builder(
                 this,
                 CHANNEL_ID
@@ -228,15 +228,22 @@ class BreakTimerService : Service() {
                 )
                 .setAutoCancel(true)
                 .build()
-
-        manager.notify(
-            FINISHED_NOTIFICATION_ID,
-            finished
         )
 
-        stopForeground(
-            STOP_FOREGROUND_REMOVE
-        )
+        if (
+            Build.VERSION.SDK_INT >=
+            Build.VERSION_CODES.N
+        ) {
+
+            stopForeground(
+                STOP_FOREGROUND_REMOVE
+            )
+
+        } else {
+
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
 
         stopSelf()
     }
@@ -244,29 +251,24 @@ class BreakTimerService : Service() {
     private fun createChannel() {
 
         if (
-            Build.VERSION.SDK_INT >=
+            Build.VERSION.SDK_INT <
             Build.VERSION_CODES.O
         ) {
-
-            val manager =
-                getSystemService(
-                    Context.NOTIFICATION_SERVICE
-                ) as NotificationManager
-
-            val channel =
-                NotificationChannel(
-                    CHANNEL_ID,
-                    "ScrollCheck Break Timer",
-                    NotificationManager.IMPORTANCE_LOW
-                )
-
-            channel.description =
-                "Background break timer."
-
-            manager.createNotificationChannel(
-                channel
-            )
+            return
         }
+
+        val manager =
+            getSystemService(
+                Context.NOTIFICATION_SERVICE
+            ) as NotificationManager
+
+        manager.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_ID,
+                "ScrollCheck Break Timer",
+                NotificationManager.IMPORTANCE_LOW
+            )
+        )
     }
 
     override fun onDestroy() {
@@ -279,6 +281,7 @@ class BreakTimerService : Service() {
     override fun onBind(
         intent: Intent?
     ): IBinder? {
+
         return null
     }
 }
