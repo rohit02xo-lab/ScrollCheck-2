@@ -818,4 +818,32 @@ class MainActivity : Activity() {
                     resources.displayMetrics.density
             ).roundToInt()
     }
+private fun addText(
+    value: String,
+    size: Int,
+    color: Int,
+    bold: Boolean
+) {
+    val textView = TextView(this).apply {
+        text = value
+        textSize = size.toFloat()
+        setTextColor(color)
+
+        if (bold) {
+            setTypeface(
+                typeface,
+                android.graphics.Typeface.BOLD
+            )
+        }
+
+        setPadding(
+            0,
+            dp(10),
+            0,
+            dp(10)
+        )
+    }
+
+    root.addView(textView)
+}
 }
