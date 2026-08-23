@@ -1,4 +1,3 @@
-cd ScrollCheck-2 && git checkout main && git pull && cat > app/src/main/java/com/scrollcheck/app/MainActivity.kt <<'EOF'
 package com.scrollcheck.app
 
 import android.app.Activity
@@ -810,3 +809,5 @@ EOF
 git add app/src/main/java/com/scrollcheck/app/MainActivity.kt
 git commit -m "Add ScrollPoints streaks and levels"
 git push origin main
+
+}
