@@ -3,29 +3,71 @@ package com.scrollcheck.app
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.os.Build
-import android.os.CountDownTimer
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 
 class BreakTimerService : Service() {
 
     companion object {
-        const val CHANNEL_ID = "scrollcheck_break_timer"
-        const val NOTIFICATION_ID = 2001
 
-        const val ACTION_START = "START_BREAK"
-        const val ACTION_STOP = "STOP_BREAK"
+        const val ACTION_START =
+            "com.scrollcheck.app.START_BREAK"
 
-        const val EXTRA_MINUTES = "minutes"
+        private const val CHANNEL_ID =
+            "scrollcheck_break"
+
+        private const val NOTIFICATION_ID =
+            9001
+
+        private const val FINISHED_NOTIFICATION_ID =
+            9002
+
+        private const val BREAK_TIME =
+            5L * 60L * 1000L
     }
 
-    private var timer: CountDownTimer? = null
+    private var endTime = 0L
+
+    private val handler =
+        Handler(Looper.getMainLooper())
+
+    private val ticker =
+        object : Runnable {
+
+            override fun run() {
+
+                val remaining =
+                    endTime -
+                        System.currentTimeMillis()
+
+                if (remaining <= 0L) {
+
+                    finishTimer()
+
+                } else {
+
+                    updateNotification(
+                        remaining
+                    )
+
+                    handler.postDelayed(
+                        this,
+                        1000L
+                    )
+                }
+            }
+        }
 
     override fun onCreate() {
         super.onCreate()
-        createNotificationChannel()
+
+        createChannel()
     }
 
     override fun onStartCommand(
@@ -34,104 +76,77 @@ class BreakTimerService : Service() {
         startId: Int
     ): Int {
 
-        when (intent?.action) {
-
-            ACTION_START -> {
-
-                val minutes =
-                    intent.getIntExtra(
-                        EXTRA_MINUTES,
-                        5
-                    )
-
-                startBreak(minutes)
-            }
-
-            ACTION_STOP -> {
-                stopBreak()
-            }
+        if (
+            intent?.action ==
+            ACTION_START
+        ) {
+            startTimer()
         }
 
         return START_NOT_STICKY
     }
 
-    private fun startBreak(minutes: Int) {
+    private fun startTimer() {
 
-        timer?.cancel()
+        endTime =
+            System.currentTimeMillis() +
+                BREAK_TIME
 
-        val safeMinutes =
-            minutes.coerceAtLeast(1)
+        val notification =
+            buildNotification(
+                BREAK_TIME
+            )
 
-        val duration =
-            safeMinutes * 60_000L
+        /*
+         * Android 14+ requires the foreground
+         * service type declared in the Manifest.
+         */
+        if (
+            Build.VERSION.SDK_INT >=
+            Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+        ) {
 
-        startForeground(
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                android.content.pm.ServiceInfo
+                    .FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+            )
+
+        } else {
+
+            startForeground(
+                NOTIFICATION_ID,
+                notification
+            )
+        }
+
+        handler.removeCallbacks(ticker)
+
+        handler.post(ticker)
+    }
+
+    private fun updateNotification(
+        remaining: Long
+    ) {
+
+        val manager =
+            getSystemService(
+                Context.NOTIFICATION_SERVICE
+            ) as NotificationManager
+
+        manager.notify(
             NOTIFICATION_ID,
-            createNotification(duration)
+            buildNotification(remaining)
         )
-
-        timer =
-            object : CountDownTimer(
-                duration,
-                1000L
-            ) {
-
-                override fun onTick(
-                    millisUntilFinished: Long
-                ) {
-
-                    val manager =
-                        getSystemService(
-                            NotificationManager::class.java
-                        )
-
-                    manager.notify(
-                        NOTIFICATION_ID,
-                        createNotification(
-                            millisUntilFinished
-                        )
-                    )
-                }
-
-                override fun onFinish() {
-
-                    val manager =
-                        getSystemService(
-                            NotificationManager::class.java
-                        )
-
-                    manager.notify(
-                        NOTIFICATION_ID,
-                        createFinishedNotification()
-                    )
-
-                    stopForeground(
-                        STOP_FOREGROUND_REMOVE
-                    )
-
-                    stopSelf()
-                }
-            }.start()
     }
 
-    private fun stopBreak() {
-
-        timer?.cancel()
-        timer = null
-
-        stopForeground(
-            STOP_FOREGROUND_REMOVE
-        )
-
-        stopSelf()
-    }
-
-    private fun createNotification(
-        millis: Long
+    private fun buildNotification(
+        remaining: Long
     ): Notification {
 
         val totalSeconds =
-            millis / 1000L
+            remaining / 1000L
 
         val minutes =
             totalSeconds / 60L
@@ -141,54 +156,102 @@ class BreakTimerService : Service() {
 
         val time =
             String.format(
+                java.util.Locale.getDefault(),
                 "%02d:%02d",
                 minutes,
                 seconds
             )
 
+        val intent =
+            Intent(
+                this,
+                MainActivity::class.java
+            )
+
+        val pendingIntent =
+            PendingIntent.getActivity(
+                this,
+                9003,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or
+                    PendingIntent.FLAG_IMMUTABLE
+            )
+
         return Notification.Builder(
             this,
             CHANNEL_ID
         )
+            .setSmallIcon(
+                android.R.drawable.ic_lock_idle_alarm
+            )
             .setContentTitle(
-                "ScrollCheck Break"
+                "ScrollCheck break"
             )
             .setContentText(
                 "Break remaining: $time"
             )
-            .setSmallIcon(
-                android.R.drawable.ic_lock_idle_alarm
+            .setContentIntent(
+                pendingIntent
             )
             .setOngoing(true)
             .setOnlyAlertOnce(true)
+            .setShowWhen(false)
             .build()
     }
 
-    private fun createFinishedNotification(): Notification {
+    private fun finishTimer() {
 
-        return Notification.Builder(
-            this,
-            CHANNEL_ID
+        handler.removeCallbacks(ticker)
+
+        val manager =
+            getSystemService(
+                Context.NOTIFICATION_SERVICE
+            ) as NotificationManager
+
+        manager.cancel(
+            NOTIFICATION_ID
         )
-            .setContentTitle(
-                "Break complete 🎉"
+
+        val finished =
+            Notification.Builder(
+                this,
+                CHANNEL_ID
             )
-            .setContentText(
-                "Your ScrollCheck break is finished."
-            )
-            .setSmallIcon(
-                android.R.drawable.ic_lock_idle_alarm
-            )
-            .setAutoCancel(true)
-            .build()
+                .setSmallIcon(
+                    android.R.drawable.ic_dialog_info
+                )
+                .setContentTitle(
+                    "Break complete"
+                )
+                .setContentText(
+                    "Your 5-minute reset is finished."
+                )
+                .setAutoCancel(true)
+                .build()
+
+        manager.notify(
+            FINISHED_NOTIFICATION_ID,
+            finished
+        )
+
+        stopForeground(
+            STOP_FOREGROUND_REMOVE
+        )
+
+        stopSelf()
     }
 
-    private fun createNotificationChannel() {
+    private fun createChannel() {
 
         if (
             Build.VERSION.SDK_INT >=
             Build.VERSION_CODES.O
         ) {
+
+            val manager =
+                getSystemService(
+                    Context.NOTIFICATION_SERVICE
+                ) as NotificationManager
 
             val channel =
                 NotificationChannel(
@@ -198,12 +261,7 @@ class BreakTimerService : Service() {
                 )
 
             channel.description =
-                "Background break timer"
-
-            val manager =
-                getSystemService(
-                    NotificationManager::class.java
-                )
+                "Background break timer."
 
             manager.createNotificationChannel(
                 channel
@@ -211,17 +269,16 @@ class BreakTimerService : Service() {
         }
     }
 
+    override fun onDestroy() {
+
+        handler.removeCallbacks(ticker)
+
+        super.onDestroy()
+    }
+
     override fun onBind(
         intent: Intent?
     ): IBinder? {
         return null
-    }
-
-    override fun onDestroy() {
-
-        timer?.cancel()
-        timer = null
-
-        super.onDestroy()
     }
 }
